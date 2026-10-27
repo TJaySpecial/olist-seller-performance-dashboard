@@ -18,9 +18,6 @@ border-radius:12px!important;padding:15px 20px!important;box-shadow:0 4px 8px rg
 st.title("📊 Olist Seller Performance Dashboard")
 st.caption("Seller revenue, performance tiers, geographical distribution and revenue concentration.")
 
-# =====================================================
-# FILE PATHS (UPDATED FOR GITHUB & STREAMLIT CLOUD)
-# =====================================================
 BASE = Path(__file__).resolve().parent
 DATA_DIR = BASE / "data"
 FILES = {
