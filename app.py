@@ -205,7 +205,7 @@ with tab2:
                  "contributors, but the revenue gap highlights a strong geographical concentration.")
         st.markdown("**Recommended Action**")
         st.write("Regional Operations and Seller Acquisition should investigate growth opportunities in states outside "
-                 "Sao Paulo. Data Analytics should compare average revenue per seller across states to determine whether "
+                 "Sao Paulo. Sales Team should compare average revenue per seller across states to determine whether "
                  "revenue differences are driven primarily by seller numbers or individual seller performance.")
     with R:
         st.subheader("Cumulative Revenue Contribution Curve")
