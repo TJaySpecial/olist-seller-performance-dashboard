@@ -326,15 +326,6 @@ with tab3:
     st.divider()
     st.subheader("Data Limitations, Method Notes & Recommendations")
     st.markdown("""
-**Methodology:**
-- **Revenue** was calculated as the sum of order-item `price`, excluding freight value.
-- Sellers are grouped into four tiers by total revenue: **Top Seller** ≥ R$ 100,000; **High Performer** ≥ R$ 50,000; **Mid Tier** ≥ R$ 10,000; **Standard** < R$ 10,000.
-- **Total Orders** counts distinct `order_id` in `order_items` to avoid multiple item rows being counted as multiple orders.
-- **Year filter** uses `order_purchase_timestamp` (applies to seller revenue).
-- **State filter** uses the `seller_state` from the **sellers** table.
-- **Multi-state selection**: "All" includes every state.
-- **Revenue Concentration** was examined in two ways: **The Pareto Curve** and **The Top 40 Revenue Share**.
-
 **Data Limitations:**
 - Due to partial coverage of the years **2016 and 2018**, annual comparisons were not included as this would make these years appear weaker compared to 2017.
 - The analysis only covers sales value, which is **Revenue** and not **Profit**, because our data does not include production costs, operating expenses, fees or other expenses.
