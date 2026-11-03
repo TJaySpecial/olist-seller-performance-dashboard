@@ -14,7 +14,7 @@ st.caption("Seller revenue, performance tiers, geographical distribution and rev
 
 BASE = Path(__file__).resolve().parent
 DATA_DIR = BASE / "data"
-FILES = {"sellers": DATA_DIR / "olist_sellers_dataset.csv”,  “items": DATA_DIR / "olist_order_items_dataset.csv", "orders": DATA_DIR / "olist_orders_dataset.csv"}
+FILES = {"sellers": DATA_DIR / "olist_sellers_dataset.csv",  "items": DATA_DIR / "olist_order_items_dataset.csv", "orders": DATA_DIR / "olist_orders_dataset.csv"}
 missing = [str(p) for p in FILES.values() if not p.exists()]
 if missing:
     st.error("Missing dataset files:\n\n" + "\n".join(missing)); st.info("Place the CSV files in the 'data/' folder."); st.stop()
