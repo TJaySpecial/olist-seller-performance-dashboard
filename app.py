@@ -85,7 +85,14 @@ top10_states = pd.read_sql_query(f"""SELECT s.seller_state AS state, COUNT(*) AS
 
 # ---------- Chart data ----------
 tier_order = ["Standard","Mid Tier","High Performer","Top Seller"]
-tier_chart = (filtered["seller_tier"].value_counts().reindex(tier_order, fill_value=0).rename_axis("seller_tier").reset_index(name="seller_count"))
+tier_chart = (
+    filtered["seller_tier"]
+    .value_counts()
+    .reindex(tier_order, fill_value=0)
+    .rename_axis("seller_tier")
+    .reset_index(name="seller_count")
+)
+
 tier_revenue = filtered.groupby("seller_tier").agg(seller_count=("seller_id","nunique"), revenue=("total_revenue","sum")).reindex(tier_order, fill_value=0).reset_index()
 tier_revenue["seller_pct"] = tier_revenue["seller_count"]/tier_revenue["seller_count"].sum()*100
 tier_revenue["revenue_pct"] = tier_revenue["revenue"]/tier_revenue["revenue"].sum()*100
@@ -105,11 +112,21 @@ with tab1:
     c3.metric("Total Sellers", f"{int(kpi['total_sellers'] or 0):,}"); c4.metric("Top Seller Revenue", f"R$ {(kpi['top_seller_revenue'] or 0):,.2f}")
     st.divider(); st.subheader("Seller Tier Distribution")
     st.caption("Sellers are grouped according to their total item revenue during the selected period.")
+    
+    st.markdown("""
+    **Tier Thresholds:**
+    - 🔹 **Standard:** < R$ 10,000
+    - 🔹 **Mid Tier:** R$ 10,000 – 50,000
+    - 🔹 **High Performer:** R$ 50,000 – 100,000
+    - 🔹 **Top Seller:** ≥ R$ 100,000
+    """)
+    
     fig = px.pie(tier_chart, names="seller_tier", values="seller_count", hole=0.55, title="Seller Distribution by Revenue Tier")
     fig.update_traces(textposition="inside", textinfo="label+percent", textfont=dict(size=18, color="white"), insidetextfont=dict(size=18, color="white"), hovertemplate="<b>%{label}</b><br>Sellers: %{value:,}<br>Share: %{percent}<extra></extra>")
     fig.update_layout(title_font=dict(size=20), legend=dict(font=dict(size=16)), margin=dict(t=60,b=40,l=40,r=40))
     fig.add_annotation(text=f"<b>{int(tier_chart['seller_count'].sum()):,}</b><br>Sellers", x=0.5, y=0.5, font=dict(size=20, color="#333"), showarrow=False)
     st.plotly_chart(fig, use_container_width=True)
+    
     standard_pct = 0.0
     if not tier_chart.empty and int(tier_chart["seller_count"].sum()) > 0:
         standard_count = int(tier_chart.loc[tier_chart["seller_tier"]=="Standard","seller_count"].sum()); seller_count = int(tier_chart["seller_count"].sum())
@@ -176,7 +193,7 @@ with tab3:
         fig.add_scatter(x=p40["sellers_ranked"], y=p40["cumulative_pct"], mode="lines+markers", name="Cumulative %", yaxis="y2", line=dict(color="crimson", width=2))
         fig.update_layout(yaxis=dict(title="Revenue (R$)"), yaxis2=dict(title="Cumulative Revenue (%)", overlaying="y", side="right", range=[0,100]), legend=dict(orientation="h", yanchor="bottom", y=1.02))
         st.plotly_chart(fig, use_container_width=True)
-        st.info(f"**Concentration insight:** The top 40 sellers(Top Sellers and High Performers Tier) account for **{concentration['top_40_pct_of_revenue']:.2f}%** of total revenue under the current filters. This illustrates the Pareto principle in marketplace revenue.")
+        st.info(f"**Concentration insight:** The top 40 sellers account for **{concentration['top_40_pct_of_revenue']:.2f}%** of total revenue under the current filters. This illustrates the Pareto principle in marketplace revenue.")
         st.markdown("**Interpretation**")
         st.write(f"The highest-revenue {min(40, int(concentration['total_sellers']))} sellers contribute **{float(concentration['top_40_pct_of_revenue'] or 0):.2f}%** of item revenue while representing **{float(concentration['top_40_pct_of_sellers'] or 0):.2f}%** of sellers in this selection. This measures concentration; it does not prove a universal 80/20 rule.")
         st.markdown("**Recommended action**")
