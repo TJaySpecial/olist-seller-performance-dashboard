@@ -169,7 +169,7 @@ with tab2:
         st.markdown("**Recommended Action**")
         st.write("Regional Operations and Seller Acquisition should investigate growth opportunities in states outside Sao Paulo. Sales Team should compare average revenue per seller across states to determine whether revenue differences are driven primarily by seller numbers or individual seller performance.")
     with R:
-        st.subheader("Cumulative Revenue Contribution Curve")
+        st.subheader("Cumulative Revenue Contribution Curve (Pareto Analysis)")
         if not pareto.empty:
             fp = px.line(pareto, x="sellers_ranked", y="cumulative_pct", labels={"sellers_ranked":"Seller Rank (highest revenue first)","cumulative_pct":"Cumulative Revenue (%)"}, title="Cumulative Revenue Contribution by Seller Rank")
             fp.update_yaxes(range=[0,100]); st.plotly_chart(fp, use_container_width=True)
@@ -180,7 +180,7 @@ with tab2:
         st.write("Key Account Management should monitor and retain high-value sellers, while Seller Management should identify realistic growth opportunities among other sellers to broaden the marketplace's revenue base.")
 
 with tab3:
-    st.subheader("Advanced Feature: Revenue Concentration (Pareto Analysis)")
+    st.subheader("Advanced Feature: Revenue Concentration")
     st.caption("Quantifies the share of sellers and item revenue represented by the 40 highest-revenue sellers in the current selection.")
     if concentration["total_sellers"] > 0:
         col_a, col_b, col_c = st.columns(3)
