@@ -26,7 +26,7 @@ The Olist Seller Performance Dashboard provides actionable business intelligence
 ## 📂 Repository Structure
 
 ```text
-Project/
+olist-seller-performance-dashboard/
 ├── data/
 │   ├── olist_sellers_dataset.csv       # Seller demographics & state mappings (3,095 rows)
 │   ├── olist_order_items_dataset.csv   # Line-item pricing & seller-order linkages (112,650 rows)
@@ -98,4 +98,4 @@ Project/
 2. **Order Disambiguation:** Orders are aggregated using `COUNT(DISTINCT order_id)` to prevent line-item fan-out errors.
 3. **Temporal Scope:** Dataset covers 2016 to 2018. Due to partial coverage in 2016 and 2018, multi-year comparisons focus on relative distribution rather than annual growth rates.
 4. **Geographical Mapping:** Refers to seller registration headquarters, not customer delivery destinations.
-5. * **Revenue vs. Profitability:** Analysis focuses strictly on gross sales value (`price`) because cost of goods sold (COGS), seller fees, operating expenses, and taxes are not available in the dataset.
+5. **Revenue vs. Profitability:** Analysis focuses strictly on gross sales value (`price`) because cost of goods sold (COGS), seller fees, operating expenses, and taxes are not available in the dataset.
