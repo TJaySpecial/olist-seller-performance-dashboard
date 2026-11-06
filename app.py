@@ -181,7 +181,7 @@ with tab2:
 
 with tab3:
     st.subheader("Advanced Feature: Revenue Concentration")
-    st.caption("Quantifies the share of sellers and item revenue represented by the 40 highest-revenue sellers in the current selection.")
+    st.caption("Quant ifies the share of sellers and item revenue represented by the 40 highest-revenue sellers in the current selection.")
     if concentration["total_sellers"] > 0:
         col_a, col_b, col_c = st.columns(3)
         col_a.metric("Top 40 Sellers Revenue", f"R$ {concentration['top_40_revenue']:,.2f}")
