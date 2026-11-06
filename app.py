@@ -51,39 +51,132 @@ state_json = json.dumps([] if "All" in selected_state else list(selected_state))
 shorten_ids = st.sidebar.checkbox("Shorten seller IDs in charts", value=True, help="Display only the first 8 characters of each seller_id; full ID still shows on hover.")
 st.sidebar.caption("Tier thresholds are based on total seller revenue in R$.")
 
-FILTER_SQL = ("WHERE ((?='All') OR strftime('%Y', o.order_purchase_timestamp)=?) " "AND ((?='[]') OR s.seller_state IN (SELECT value FROM json_each(?)))")
-JOIN_SQL = ("FROM sellers AS s JOIN order_items AS oi ON s.seller_id=oi.seller_id " "JOIN orders AS o ON oi.order_id=o.order_id")
 PARAMS = (selected_year, selected_year, state_json, state_json)
 
 # ---------- Queries ----------
-kpi = pd.read_sql_query(f"""WITH sr AS (SELECT s.seller_id, SUM(oi.price) AS rev {JOIN_SQL} {FILTER_SQL} GROUP BY s.seller_id)
-SELECT COUNT(*) AS total_sellers, ROUND(SUM(rev),2) AS total_revenue, ROUND(MAX(rev),2) AS top_seller_revenue,
-       SUM(rev>=100000) AS top_sellers, SUM(rev>=50000 AND rev<100000) AS high_performers,
-       SUM(rev>=10000 AND rev<50000) AS mid_tier, SUM(rev<10000) AS standard_sellers FROM sr;""", conn, params=PARAMS).iloc[0]
+kpi = pd.read_sql_query("""
+    WITH sr AS (
+        SELECT s.seller_id, SUM(oi.price) AS rev 
+        FROM sellers AS s 
+        JOIN order_items AS oi ON s.seller_id = oi.seller_id 
+        JOIN orders AS o ON oi.order_id = o.order_id 
+        WHERE ((? = 'All') OR strftime('%Y', o.order_purchase_timestamp) = ?) 
+          AND ((? = '[]') OR s.seller_state IN (SELECT value FROM json_each(?)))
+        GROUP BY s.seller_id
+    )
+    SELECT COUNT(*) AS total_sellers, 
+           ROUND(SUM(rev), 2) AS total_revenue, 
+           ROUND(MAX(rev), 2) AS top_seller_revenue,
+           SUM(rev >= 100000) AS top_sellers, 
+           SUM(rev >= 50000 AND rev < 100000) AS high_performers,
+           SUM(rev >= 10000 AND rev < 50000) AS mid_tier, 
+           SUM(rev < 10000) AS standard_sellers 
+    FROM sr;
+""", conn, params=PARAMS).iloc[0]
 
-total_orders_kpi = pd.read_sql_query("SELECT COUNT(DISTINCT order_id) AS total_orders FROM orders " "WHERE (?='All') OR strftime('%Y', order_purchase_timestamp)=?", conn, params=(selected_year, selected_year)).iloc[0]
+total_orders_kpi = pd.read_sql_query("""
+    SELECT COUNT(DISTINCT order_id) AS total_orders 
+    FROM orders 
+    WHERE (? = 'All') OR strftime('%Y', order_purchase_timestamp) = ?
+""", conn, params=(selected_year, selected_year)).iloc[0]
 
-top20 = pd.read_sql_query(f"""SELECT s.seller_id, s.seller_state, ROUND(SUM(oi.price),2) AS total_revenue, COUNT(DISTINCT oi.order_id) AS total_orders
-{JOIN_SQL} {FILTER_SQL} GROUP BY s.seller_id, s.seller_state ORDER BY total_revenue DESC LIMIT 20;""", conn, params=PARAMS)
+top20 = pd.read_sql_query("""
+    SELECT s.seller_id, s.seller_state, 
+           ROUND(SUM(oi.price), 2) AS total_revenue, 
+           COUNT(DISTINCT oi.order_id) AS total_orders
+    FROM sellers AS s 
+    JOIN order_items AS oi ON s.seller_id = oi.seller_id 
+    JOIN orders AS o ON oi.order_id = o.order_id 
+    WHERE ((? = 'All') OR strftime('%Y', o.order_purchase_timestamp) = ?) 
+      AND ((? = '[]') OR s.seller_state IN (SELECT value FROM json_each(?)))
+    GROUP BY s.seller_id, s.seller_state 
+    ORDER BY total_revenue DESC 
+    LIMIT 20;
+""", conn, params=PARAMS)
 
-pareto = pd.read_sql_query(f"""WITH sr AS (SELECT s.seller_id, SUM(oi.price) AS rev {JOIN_SQL} {FILTER_SQL} GROUP BY s.seller_id),
-r AS (SELECT seller_id, rev, ROW_NUMBER() OVER (ORDER BY rev DESC, seller_id) rn, SUM(rev) OVER () gt FROM sr)
-SELECT rn AS sellers_ranked, ROUND(rev,2) AS revenue, ROUND(100.0*SUM(rev) OVER (ORDER BY rn ROWS UNBOUNDED PRECEDING)/NULLIF(gt,0),2) AS cumulative_pct FROM r ORDER BY rn;""", conn, params=PARAMS)
+pareto = pd.read_sql_query("""
+    WITH sr AS (
+        SELECT s.seller_id, SUM(oi.price) AS rev 
+        FROM sellers AS s 
+        JOIN order_items AS oi ON s.seller_id = oi.seller_id 
+        JOIN orders AS o ON oi.order_id = o.order_id 
+        WHERE ((? = 'All') OR strftime('%Y', o.order_purchase_timestamp) = ?) 
+          AND ((? = '[]') OR s.seller_state IN (SELECT value FROM json_each(?)))
+        GROUP BY s.seller_id
+    ),
+    r AS (
+        SELECT seller_id, rev, 
+               ROW_NUMBER() OVER (ORDER BY rev DESC, seller_id) AS rn, 
+               SUM(rev) OVER () AS gt 
+        FROM sr
+    )
+    SELECT rn AS sellers_ranked, 
+           ROUND(rev, 2) AS revenue, 
+           ROUND(100.0 * SUM(rev) OVER (ORDER BY rn ROWS UNBOUNDED PRECEDING) / NULLIF(gt, 0), 2) AS cumulative_pct 
+    FROM r 
+    ORDER BY rn;
+""", conn, params=PARAMS)
 
-filtered = pd.read_sql_query(f"""WITH sr AS (SELECT s.seller_id, s.seller_state, SUM(oi.price) AS total_revenue, COUNT(DISTINCT oi.order_id) AS total_orders {JOIN_SQL} {FILTER_SQL} GROUP BY s.seller_id, s.seller_state)
-SELECT *, CASE WHEN total_revenue>=100000 THEN 'Top Seller' WHEN total_revenue>=50000 THEN 'High Performer' WHEN total_revenue>=10000 THEN 'Mid Tier' ELSE 'Standard' END AS seller_tier FROM sr;""", conn, params=PARAMS)
+filtered = pd.read_sql_query("""
+    WITH sr AS (
+        SELECT s.seller_id, s.seller_state, 
+               SUM(oi.price) AS total_revenue, 
+               COUNT(DISTINCT oi.order_id) AS total_orders 
+        FROM sellers AS s 
+        JOIN order_items AS oi ON s.seller_id = oi.seller_id 
+        JOIN orders AS o ON oi.order_id = o.order_id 
+        WHERE ((? = 'All') OR strftime('%Y', o.order_purchase_timestamp) = ?) 
+          AND ((? = '[]') OR s.seller_state IN (SELECT value FROM json_each(?)))
+        GROUP BY s.seller_id, s.seller_state
+    )
+    SELECT *, 
+           CASE 
+               WHEN total_revenue >= 100000 THEN 'Top Seller' 
+               WHEN total_revenue >= 50000 THEN 'High Performer' 
+               WHEN total_revenue >= 10000 THEN 'Mid Tier' 
+               ELSE 'Standard' 
+           END AS seller_tier 
+    FROM sr;
+""", conn, params=PARAMS)
 
-concentration = pd.read_sql_query(f"""WITH sr AS (SELECT s.seller_id, SUM(oi.price) AS rev {JOIN_SQL} {FILTER_SQL} GROUP BY s.seller_id),
-t40 AS (SELECT SUM(rev) r FROM (SELECT rev FROM sr ORDER BY rev DESC LIMIT 40))
-SELECT (SELECT COUNT(*) FROM sr) total_sellers, ROUND(100.0*40/(SELECT COUNT(*) FROM sr),2) top_40_pct_of_sellers, (SELECT ROUND(r,2) FROM t40) top_40_revenue,
-       ROUND(100.0*(SELECT r FROM t40)/(SELECT SUM(rev) FROM sr),2) top_40_pct_of_revenue""", conn, params=PARAMS).iloc[0]
+concentration = pd.read_sql_query("""
+    WITH sr AS (
+        SELECT s.seller_id, SUM(oi.price) AS rev 
+        FROM sellers AS s 
+        JOIN order_items AS oi ON s.seller_id = oi.seller_id 
+        JOIN orders AS o ON oi.order_id = o.order_id 
+        WHERE ((? = 'All') OR strftime('%Y', o.order_purchase_timestamp) = ?) 
+          AND ((? = '[]') OR s.seller_state IN (SELECT value FROM json_each(?)))
+        GROUP BY s.seller_id
+    ),
+    t40 AS (
+        SELECT SUM(rev) AS r 
+        FROM (SELECT rev FROM sr ORDER BY rev DESC LIMIT 40)
+    )
+    SELECT (SELECT COUNT(*) FROM sr) AS total_sellers, 
+           ROUND(100.0 * 40 / (SELECT COUNT(*) FROM sr), 2) AS top_40_pct_of_sellers, 
+           (SELECT ROUND(r, 2) FROM t40) AS top_40_revenue,
+           ROUND(100.0 * (SELECT r FROM t40) / (SELECT SUM(rev) FROM sr), 2) AS top_40_pct_of_revenue;
+""", conn, params=PARAMS).iloc[0]
 
-top10_states = pd.read_sql_query(f"""SELECT s.seller_state AS state, COUNT(*) AS sellers, ROUND(SUM(t.total_revenue),2) AS revenue FROM (
-    SELECT s.seller_id, s.seller_state, SUM(i.price) AS total_revenue FROM order_items i JOIN sellers s ON i.seller_id = s.seller_id JOIN orders o ON i.order_id = o.order_id
-    WHERE ((?='All') OR strftime('%Y', o.order_purchase_timestamp)=?) AND ((?='[]') OR s.seller_state IN (SELECT value FROM json_each(?)))
-    GROUP BY s.seller_id, s.seller_state) t JOIN sellers s ON t.seller_id = s.seller_id GROUP BY s.seller_state ORDER BY revenue DESC LIMIT 10;""", conn, params=PARAMS)
+top10_states = pd.read_sql_query("""
+    SELECT s.seller_state AS state, COUNT(*) AS sellers, ROUND(SUM(t.total_revenue), 2) AS revenue 
+    FROM (
+        SELECT s.seller_id, s.seller_state, SUM(i.price) AS total_revenue 
+        FROM order_items i 
+        JOIN sellers s ON i.seller_id = s.seller_id 
+        JOIN orders o ON i.order_id = o.order_id
+        WHERE ((? = 'All') OR strftime('%Y', o.order_purchase_timestamp) = ?) 
+          AND ((? = '[]') OR s.seller_state IN (SELECT value FROM json_each(?)))
+        GROUP BY s.seller_id, s.seller_state
+    ) t 
+    JOIN sellers s ON t.seller_id = s.seller_id 
+    GROUP BY s.seller_state 
+    ORDER BY revenue DESC 
+    LIMIT 10;
+""", conn, params=PARAMS)
 
-# ---------- Chart data ----------
+# ---------- Chart Data ----------
 tier_order = ["Standard","Mid Tier","High Performer","Top Seller"]
 tier_chart = (
     filtered["seller_tier"]
@@ -100,6 +193,47 @@ tier_revenue["seller_pct_formatted"] = tier_revenue["seller_pct"].map("{:.2f}%".
 top20_sorted = top20.sort_values("total_revenue").copy()
 top20_sorted["seller_label"] = top20_sorted["seller_id"].str.slice(0,8)+"…" if shorten_ids else top20_sorted["seller_id"]
 state_chart = top10_states.rename(columns={"state":"seller_state"}).sort_values("revenue")
+
+
+# ---------- Chart Functions ----------
+def chart_tier_distribution(tier_chart):
+    fig = px.pie(tier_chart, names="seller_tier", values="seller_count", hole=0.55, title="Seller Distribution by Revenue Tier")
+    fig.update_traces(textposition="inside", textinfo="label+percent", textfont=dict(size=18, color="white"), insidetextfont=dict(size=18, color="white"), hovertemplate="<b>%{label}</b><br>Sellers: %{value:,}<br>Share: %{percent}<extra></extra>")
+    fig.update_layout(title_font=dict(size=20), legend=dict(font=dict(size=16)), margin=dict(t=60,b=40,l=40,r=40))
+    fig.add_annotation(text=f"<b>{int(tier_chart['seller_count'].sum()):,}</b><br>Sellers", x=0.5, y=0.5, font=dict(size=20, color="#333"), showarrow=False)
+    return fig
+
+def chart_tier_revenue(tier_revenue):
+    fig = px.bar(tier_revenue, x="seller_tier", y="revenue_pct", color="seller_tier", text=tier_revenue["revenue_pct"].map("{:.2f}%".format),
+        hover_data={"seller_count":":,","seller_pct":False,"seller_pct_formatted":True,"revenue":":,.2f","revenue_pct":False,"seller_tier":True},
+        labels={"seller_tier":"Revenue Tier","text":"Revenue Contribution","seller_count":"Number of Sellers","seller_pct_formatted":"Seller Share","revenue":"Total Item Revenue (R$)"},
+        title="Percentage of Revenue Generated by Each Tier")
+    fig.update_traces(textposition="outside", cliponaxis=False)
+    fig.update_layout(showlegend=False, yaxis_title="Revenue Contribution (%)")
+    return fig
+
+def chart_top20_sellers(top20_sorted):
+    return px.bar(top20_sorted, x="total_revenue", y="seller_label", orientation="h", hover_data=["seller_id","seller_state","total_orders"],
+                  labels={"total_revenue":"Revenue (R$)","seller_label":"Seller ID","seller_id":"Full Seller ID","seller_state":"State","total_orders":"Distinct Orders"},
+                  title="Highest-Revenue Sellers")
+
+def chart_top10_states(state_chart):
+    fs = px.bar(state_chart, x="revenue", y="seller_state", orientation="h", hover_data=["sellers"],
+                labels={"revenue":"Revenue (R$)","seller_state":"Seller State","sellers":"Number of Sellers"}, title="Top 10 States by Seller Revenue")
+    fs.update_yaxes(type="category", categoryorder="array", categoryarray=state_chart["seller_state"].tolist(), tickmode="array", tickvals=state_chart["seller_state"].tolist(), ticktext=state_chart["seller_state"].tolist(), tickfont=dict(size=14), automargin=True)
+    fs.update_traces(marker_line_width=0, width=0.75)
+    fs.update_layout(margin=dict(t=60,b=40,l=80,r=40), title_font=dict(size=18), bargap=0.25)
+    return fs
+
+def chart_pareto(pareto):
+    return px.line(pareto, x="sellers_ranked", y="cumulative_pct", labels={"sellers_ranked":"Seller Rank (highest revenue first)","cumulative_pct":"Cumulative Revenue (%)"}, title="Cumulative Revenue Contribution by Seller Rank")
+
+def chart_concentration_pareto(p40):
+    fig = px.bar(p40, x="sellers_ranked", y="revenue", title="Revenue Concentration — Top 40 Sellers (Pareto View)", labels={"sellers_ranked":"Seller Rank","revenue":"Revenue (R$)"})
+    fig.add_scatter(x=p40["sellers_ranked"], y=p40["cumulative_pct"], mode="lines+markers", name="Cumulative %", yaxis="y2", line=dict(color="crimson", width=2))
+    fig.update_layout(yaxis=dict(title="Revenue (R$)"), yaxis2=dict(title="Cumulative Revenue (%)", overlaying="y", side="right", range=[0,100]), legend=dict(orientation="h", yanchor="bottom", y=1.02))
+    return fig
+
 
 # ---------- Tabs ----------
 tab1, tab2, tab3 = st.tabs(["Overview","Seller Performance","Detail & Method"])
@@ -121,11 +255,7 @@ with tab1:
     - 🔹 **Top Seller:** ≥ R$ 100,000
     """)
     
-    fig = px.pie(tier_chart, names="seller_tier", values="seller_count", hole=0.55, title="Seller Distribution by Revenue Tier")
-    fig.update_traces(textposition="inside", textinfo="label+percent", textfont=dict(size=18, color="white"), insidetextfont=dict(size=18, color="white"), hovertemplate="<b>%{label}</b><br>Sellers: %{value:,}<br>Share: %{percent}<extra></extra>")
-    fig.update_layout(title_font=dict(size=20), legend=dict(font=dict(size=16)), margin=dict(t=60,b=40,l=40,r=40))
-    fig.add_annotation(text=f"<b>{int(tier_chart['seller_count'].sum()):,}</b><br>Sellers", x=0.5, y=0.5, font=dict(size=20, color="#333"), showarrow=False)
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(chart_tier_distribution(tier_chart), use_container_width=True)
     
     standard_pct = 0.0
     if not tier_chart.empty and int(tier_chart["seller_count"].sum()) > 0:
@@ -136,13 +266,9 @@ with tab1:
     st.markdown("**Recommended action**")
     st.write("Compare sellers across tiers by order volume, product mix, and average item revenue per order. Use these comparisons to identify realistic support and growth opportunities.")
     st.divider(); st.subheader("Revenue Contribution by Seller Tier")
-    fig_tier_rev = px.bar(tier_revenue, x="seller_tier", y="revenue_pct", color="seller_tier", text=tier_revenue["revenue_pct"].map("{:.2f}%".format),
-        hover_data={"seller_count":":,","seller_pct":False,"seller_pct_formatted":True,"revenue":":,.2f","revenue_pct":False,"seller_tier":True},
-        labels={"seller_tier":"Revenue Tier","text":"Revenue Contribution","seller_count":"Number of Sellers","seller_pct_formatted":"Seller Share","revenue":"Total Item Revenue (R$)"},
-        title="Percentage of Revenue Generated by Each Tier")
-    fig_tier_rev.update_traces(textposition="outside", cliponaxis=False)
-    fig_tier_rev.update_layout(showlegend=False, yaxis_title="Revenue Contribution (%)")
-    st.plotly_chart(fig_tier_rev, use_container_width=True)
+    
+    st.plotly_chart(chart_tier_revenue(tier_revenue), use_container_width=True)
+    
     st.markdown("**Key Insight**")
     st.write("Mid Tier sellers generate 36.73% of total revenue despite representing only 8.14% of sellers. Standard sellers account for 90.57% of sellers but contribute 33.73% of revenue.")
     st.markdown("**Recommended Action**")
@@ -151,19 +277,16 @@ with tab1:
 with tab2:
     st.subheader("Top 20 Sellers by Revenue")
     st.caption("Compares item revenue by seller registration state—not customer location. Interpret state totals alongside the number of sellers in each state. " + ("Seller IDs are shortened to 8 characters; full ID appears on hover." if shorten_ids else "Full seller IDs are shown."))
-    st.plotly_chart(px.bar(top20_sorted, x="total_revenue", y="seller_label", orientation="h", hover_data=["seller_id","seller_state","total_orders"],
-                           labels={"total_revenue":"Revenue (R$)","seller_label":"Seller ID","seller_id":"Full Seller ID","seller_state":"State","total_orders":"Distinct Orders"},
-                           title="Highest-Revenue Sellers"), use_container_width=True)
+    
+    st.plotly_chart(chart_top20_sellers(top20_sorted), use_container_width=True)
+    
     st.divider(); L, R = st.columns(2)
     with L:
         st.subheader("Top 10 States by Seller Revenue")
         state_chart["seller_state"] = state_chart["seller_state"].astype(str)
-        fs = px.bar(state_chart, x="revenue", y="seller_state", orientation="h", hover_data=["sellers"],
-                    labels={"revenue":"Revenue (R$)","seller_state":"Seller State","sellers":"Number of Sellers"}, title="Top 10 States by Seller Revenue")
-        fs.update_yaxes(type="category", categoryorder="array", categoryarray=state_chart["seller_state"].tolist(), tickmode="array", tickvals=state_chart["seller_state"].tolist(), ticktext=state_chart["seller_state"].tolist(), tickfont=dict(size=14), automargin=True)
-        fs.update_traces(marker_line_width=0, width=0.75)
-        fs.update_layout(margin=dict(t=60,b=40,l=80,r=40), title_font=dict(size=18), bargap=0.25)
-        st.plotly_chart(fs, use_container_width=True)
+        
+        st.plotly_chart(chart_top10_states(state_chart), use_container_width=True)
+        
         st.markdown("**Key Insight**")
         st.write("Sao Paulo accounts for 64.41% of total item revenue and approximately 59.74% of all sellers, making it Olist's dominant revenue-generating state. Parana and Minas Gerais are the next-largest contributors, but the revenue gap highlights a strong geographical concentration.")
         st.markdown("**Recommended Action**")
@@ -171,8 +294,8 @@ with tab2:
     with R:
         st.subheader("Cumulative Revenue Contribution Curve (Pareto Analysis)")
         if not pareto.empty:
-            fp = px.line(pareto, x="sellers_ranked", y="cumulative_pct", labels={"sellers_ranked":"Seller Rank (highest revenue first)","cumulative_pct":"Cumulative Revenue (%)"}, title="Cumulative Revenue Contribution by Seller Rank")
-            fp.update_yaxes(range=[0,100]); st.plotly_chart(fp, use_container_width=True)
+            
+            st.plotly_chart(chart_pareto(pareto), use_container_width=True)
         else: st.info("No sellers match the selected filters.")
         st.markdown("**Key Insight**")
         st.write("Revenue contribution is concentrated among the highest-ranked sellers. As more sellers are added, cumulative revenue increases at a slower rate, showing that lower-ranked sellers contribute less revenue individually.")
@@ -181,7 +304,7 @@ with tab2:
 
 with tab3:
     st.subheader("Advanced Feature: Revenue Concentration")
-    st.caption("Quant ifies the share of sellers and item revenue represented by the 40 highest-revenue sellers in the current selection.")
+    st.caption("Quantifies the share of sellers and item revenue represented by the 40 highest-revenue sellers in the current selection.")
     if concentration["total_sellers"] > 0:
         col_a, col_b, col_c = st.columns(3)
         col_a.metric("Top 40 Sellers Revenue", f"R$ {concentration['top_40_revenue']:,.2f}")
@@ -189,10 +312,9 @@ with tab3:
         col_c.metric("Top 40 % of Sellers", f"{concentration['top_40_pct_of_sellers']:.2f}%")
     if not pareto.empty:
         p40 = pareto.head(40)
-        fig = px.bar(p40, x="sellers_ranked", y="revenue", title="Revenue Concentration — Top 40 Sellers (Pareto View)", labels={"sellers_ranked":"Seller Rank","revenue":"Revenue (R$)"})
-        fig.add_scatter(x=p40["sellers_ranked"], y=p40["cumulative_pct"], mode="lines+markers", name="Cumulative %", yaxis="y2", line=dict(color="crimson", width=2))
-        fig.update_layout(yaxis=dict(title="Revenue (R$)"), yaxis2=dict(title="Cumulative Revenue (%)", overlaying="y", side="right", range=[0,100]), legend=dict(orientation="h", yanchor="bottom", y=1.02))
-        st.plotly_chart(fig, use_container_width=True)
+        
+        st.plotly_chart(chart_concentration_pareto(p40), use_container_width=True)
+        
         st.info(f"**Concentration insight:** The top 40 sellers account for **{concentration['top_40_pct_of_revenue']:.2f}%** of total revenue under the current filters. This illustrates the Pareto principle in marketplace revenue.")
         st.markdown("**Interpretation**")
         st.write(f"The highest-revenue {min(40, int(concentration['total_sellers']))} sellers contribute **{float(concentration['top_40_pct_of_revenue'] or 0):.2f}%** of item revenue while representing **{float(concentration['top_40_pct_of_sellers'] or 0):.2f}%** of sellers in this selection. This measures concentration; it does not prove a universal 80/20 rule.")
